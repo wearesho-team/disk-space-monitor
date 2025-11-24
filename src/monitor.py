@@ -5,6 +5,7 @@ import logging
 import os
 import signal
 import sys
+import threading
 import time
 
 import psutil
@@ -31,6 +32,7 @@ class DiskMonitor:
         # Track cooldowns: {path: {level: timestamp}}
         self.last_alerts: dict[str, dict[str, float]] = {}
         self._running = False
+        self._stop_event = threading.Event()
 
     def check_disk_usage(self, path: str) -> DiskUsage | None:
         """
@@ -199,7 +201,10 @@ class DiskMonitor:
                 logger.debug(
                     "Check cycle complete, sleeping for %ds", self.config.monitoring.check_interval
                 )
-                time.sleep(self.config.monitoring.check_interval)
+                # Use event.wait() instead of time.sleep() for interruptible sleep
+                if self._stop_event.wait(timeout=self.config.monitoring.check_interval):
+                    # Event was set, meaning stop was requested
+                    break
 
             except KeyboardInterrupt:
                 logger.info("Received keyboard interrupt")
@@ -207,13 +212,15 @@ class DiskMonitor:
             except Exception as e:
                 logger.exception("Error during check cycle: %s", e)
                 # Continue running even if there's an error
-                time.sleep(self.config.monitoring.check_interval)
+                if self._stop_event.wait(timeout=self.config.monitoring.check_interval):
+                    break
 
         logger.info("Disk monitor stopped")
 
     def stop(self) -> None:
         """Signal the monitor to stop."""
         self._running = False
+        self._stop_event.set()  # Wake up from sleep immediately
 
 
 def setup_logging(level: str) -> None:
@@ -258,9 +265,12 @@ def run_test_event(config: Config, sentry_client: SentryAlertClient) -> bool:
     Returns:
         True if the test event was sent successfully, False otherwise.
     """
+    import time as time_module
+
     monitor = DiskMonitor(config, sentry_client)
 
     # Collect disk usage for all configured paths
+    logger.info("Collecting disk usage...")
     disk_usages: list[DiskUsage] = []
     for path in config.monitoring.paths:
         usage = monitor.check_disk_usage(path)
@@ -278,10 +288,23 @@ def run_test_event(config: Config, sentry_client: SentryAlertClient) -> bool:
         logger.error("Could not collect disk usage from any configured path")
         return False
 
-    # Send test event
+    # Initialize Sentry
+    logger.info("Initializing Sentry SDK...")
+    start = time_module.time()
     sentry_client.initialize()
+    logger.info("Sentry SDK initialized in %.2fs", time_module.time() - start)
+
+    # Send test event
+    logger.info("Sending test event to Sentry...")
+    start = time_module.time()
     success = sentry_client.send_test_event(config.hostname, disk_usages)
-    sentry_client.flush(timeout=5)
+    logger.info("Test event sent in %.2fs", time_module.time() - start)
+
+    # Flush to ensure delivery
+    logger.info("Flushing events (waiting up to 10s for delivery)...")
+    start = time_module.time()
+    sentry_client.flush(timeout=10)
+    logger.info("Flush completed in %.2fs", time_module.time() - start)
 
     return success
 

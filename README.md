@@ -42,6 +42,21 @@ docker compose up -d
 docker compose logs -f
 ```
 
+### Upgrading
+
+After pulling updates from the repository, rebuild the Docker image:
+
+```bash
+git pull
+docker compose build --no-cache
+docker compose up -d
+```
+
+To verify the new version is running:
+```bash
+docker compose run --rm disk-monitor python -m src.monitor --test
+```
+
 ### Running Locally
 
 1. Install dependencies:
