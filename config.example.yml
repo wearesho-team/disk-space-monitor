@@ -1,0 +1,19 @@
+sentry:
+  dsn: "https://your-key@your-sentry-host/project-id"
+  environment: "production"
+
+monitoring:
+  paths:
+    - /
+    - /var/lib/docker
+  check_interval: 300  # seconds
+
+thresholds:
+  warning: 80   # percentage
+  critical: 90  # percentage
+
+alerts:
+  cooldown: 3600  # seconds - don't repeat same alert within this window
+
+logging:
+  level: INFO

@@ -1,0 +1,40 @@
+services:
+  disk-monitor:
+    build: .
+    container_name: disk-space-monitor
+    restart: unless-stopped
+
+    # Mount host filesystem as read-only
+    volumes:
+      - /:/hostfs:ro
+      # Optional: mount config file
+      # - ./config.yml:/app/config.yml:ro
+
+    # Environment variables from .env file
+    env_file:
+      - .env
+
+    # Override default hostfs prefix for Docker
+    environment:
+      - HOSTFS_PREFIX=/hostfs
+
+    # Resource limits - this is a lightweight service
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.05'
+          memory: 32M
+
+    # Logging configuration
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Network mode - none needed for disk monitoring
+    # Uncomment if you need network access to Sentry
+    # network_mode: bridge
