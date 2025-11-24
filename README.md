@@ -34,12 +34,12 @@ SENTRY_DSN=https://your-key@your-sentry-host/project-id
 
 4. Start the monitor:
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 5. View logs:
 ```bash
-docker-compose logs -f
+docker compose logs -f
 ```
 
 ### Running Locally
@@ -68,7 +68,7 @@ Before running the monitor continuously, you can send a test event to verify Sen
 python -m src.monitor --test
 
 # Docker
-docker-compose run --rm disk-monitor python -m src.monitor --test
+docker compose run --rm disk-monitor python -m src.monitor --test
 ```
 
 This sends an info-level event with current disk usage to Sentry and exits. Check your Sentry dashboard to confirm the event was received.
@@ -145,7 +145,7 @@ The monitor automatically translates paths (e.g., `/` becomes `/hostfs/`) when `
 
 ### Resource Limits
 
-The default `docker-compose.yml` includes resource limits:
+The default `docker compose.yml` includes resource limits:
 - CPU: 0.25 cores (max)
 - Memory: 128MB (max)
 
@@ -229,7 +229,7 @@ And `HOSTFS_PREFIX=/hostfs` is set.
 2. Verify network connectivity to your Sentry instance
 3. Check logs for connection errors:
    ```bash
-   docker-compose logs disk-monitor | grep -i error
+   docker compose logs disk-monitor | grep -i error
    ```
 
 ### Permission errors
