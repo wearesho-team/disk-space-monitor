@@ -145,6 +145,62 @@ class SentryAlertClient:
             logger.error("Failed to send alert to Sentry: %s", e)
             return False
 
+    def send_test_event(self, hostname: str, disk_usages: list[DiskUsage]) -> bool:
+        """
+        Send a test event to Sentry to verify connectivity.
+
+        Args:
+            hostname: The hostname to include in the event.
+            disk_usages: List of current disk usage stats to include.
+
+        Returns:
+            True if the event was sent successfully, False otherwise.
+        """
+        if not self._initialized:
+            self.initialize()
+
+        try:
+            with sentry_sdk.push_scope() as scope:
+                # Set tags for filtering
+                scope.set_tag("monitor_type", "disk_space")
+                scope.set_tag("host", hostname)
+                scope.set_tag("event_type", "test")
+
+                # Build disk usage summary
+                disk_info = []
+                for usage in disk_usages:
+                    disk_info.append(
+                        {
+                            "path": usage.path,
+                            "usage_percent": round(usage.usage_percent, 2),
+                            "used_gb": round(usage.used_gb, 2),
+                            "free_gb": round(usage.free_gb, 2),
+                            "total_gb": round(usage.total_gb, 2),
+                        }
+                    )
+
+                scope.set_extra("disk_usage", disk_info)
+                scope.set_extra("paths_monitored", [u.path for u in disk_usages])
+
+                # Set fingerprint for grouping test events together
+                scope.fingerprint = ["disk_space", "test", hostname]
+
+                scope.level = "info"
+
+                message = f"Disk space monitor test event from {hostname}"
+                event_id = sentry_sdk.capture_message(message, level="info")
+
+            if event_id:
+                logger.info("Test event sent to Sentry - event_id: %s", event_id)
+                return True
+            else:
+                logger.warning("Sentry returned no event_id for test event")
+                return False
+
+        except Exception as e:
+            logger.error("Failed to send test event to Sentry: %s", e)
+            return False
+
     def flush(self, timeout: int = 2) -> None:
         """
         Flush pending events to Sentry.

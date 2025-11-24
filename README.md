@@ -10,6 +10,7 @@ A Python-based disk space monitoring tool that runs in Docker and sends alerts t
 - Self-hosted Sentry support
 - Docker-ready with host filesystem monitoring
 - Proper Sentry event grouping and tagging
+- Test mode to verify Sentry connectivity
 
 ## Quick Start
 
@@ -56,6 +57,31 @@ export SENTRY_DSN=https://your-key@your-sentry-host/project-id
 3. Run the monitor:
 ```bash
 python -m src.monitor
+```
+
+### Testing Sentry Connectivity
+
+Before running the monitor continuously, you can send a test event to verify Sentry is properly configured:
+
+```bash
+# Local
+python -m src.monitor --test
+
+# Docker
+docker-compose run --rm disk-monitor python -m src.monitor --test
+```
+
+This sends an info-level event with current disk usage to Sentry and exits. Check your Sentry dashboard to confirm the event was received.
+
+## Command-Line Options
+
+```
+python -m src.monitor [OPTIONS]
+
+Options:
+  --test          Send a test event to Sentry and exit
+  --config PATH   Path to config file (default: config.yml)
+  -h, --help      Show help message
 ```
 
 ## Configuration

@@ -1,5 +1,6 @@
 """Core disk space monitoring logic."""
 
+import argparse
 import logging
 import os
 import signal
@@ -225,10 +226,72 @@ def setup_logging(level: str) -> None:
     )
 
 
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Monitor disk space and send alerts to Sentry",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python -m src.monitor              # Run the monitor
+  python -m src.monitor --test       # Send a test event to Sentry and exit
+        """,
+    )
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        help="Send a test event to Sentry with current disk usage and exit",
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Path to config file (default: config.yml or CONFIG_PATH env var)",
+    )
+    return parser.parse_args()
+
+
+def run_test_event(config: Config, sentry_client: SentryAlertClient) -> bool:
+    """
+    Send a test event to Sentry with current disk usage.
+
+    Returns:
+        True if the test event was sent successfully, False otherwise.
+    """
+    monitor = DiskMonitor(config, sentry_client)
+
+    # Collect disk usage for all configured paths
+    disk_usages: list[DiskUsage] = []
+    for path in config.monitoring.paths:
+        usage = monitor.check_disk_usage(path)
+        if usage:
+            disk_usages.append(usage)
+            logger.info(
+                "Disk usage for %s: %.1f%% (%.1f GB free of %.1f GB)",
+                path,
+                usage.usage_percent,
+                usage.free_gb,
+                usage.total_gb,
+            )
+
+    if not disk_usages:
+        logger.error("Could not collect disk usage from any configured path")
+        return False
+
+    # Send test event
+    sentry_client.initialize()
+    success = sentry_client.send_test_event(config.hostname, disk_usages)
+    sentry_client.flush(timeout=5)
+
+    return success
+
+
 def main() -> None:
     """Entry point for the disk monitor."""
+    args = parse_args()
+
     # Load configuration
-    config_path = os.getenv("CONFIG_PATH", "config.yml")
+    config_path = args.config or os.getenv("CONFIG_PATH", "config.yml")
     try:
         config = load_config(config_path if os.path.exists(config_path) else None)
     except ValueError as e:
@@ -243,6 +306,17 @@ def main() -> None:
         dsn=config.sentry.dsn,
         environment=config.sentry.environment,
     )
+
+    # Handle test mode
+    if args.test:
+        logger.info("Running in test mode - sending test event to Sentry")
+        success = run_test_event(config, sentry_client)
+        if success:
+            logger.info("Test event sent successfully!")
+            sys.exit(0)
+        else:
+            logger.error("Failed to send test event")
+            sys.exit(1)
 
     # Create and run monitor
     monitor = DiskMonitor(config, sentry_client)
